@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Menu, Plus, LogOut, Filter, Settings, Moon, Sun, Trash2, Pencil, Check, SlidersHorizontal, Globe } from 'lucide-react';
 import { GlassCard } from './components/GlassCard';
@@ -27,7 +26,7 @@ function deg2rad(deg: number) {
   return deg * (Math.PI / 180);
 }
 
-// Mock Initial Data with Coordinates
+// Mock Initial Data with Coordinates - ONLY HORIZONTAL PHOTOS KEPT
 const BASE_PHOTOS: Photo[] = [
   {
     id: '1',
@@ -40,32 +39,6 @@ const BASE_PHOTOS: Photo[] = [
     exif: { 
       camera: 'Leica M11', lens: 'Summilux 35mm', focalLength: '35mm', aperture: 'f/5.6', shutterSpeed: '1/250s', iso: '100', location: '阿尔卑斯, 瑞士', date: '2023-10-12',
       latitude: 46.8182, longitude: 8.2275 // Switzerland
-    }
-  },
-  {
-    id: '2',
-    url: 'https://picsum.photos/id/45/600/800',
-    title: '城市孤独',
-    category: Category.STREET,
-    width: 600,
-    height: 800,
-    rating: 4,
-    exif: { 
-      camera: 'Fujifilm X-T5', lens: '23mm f/1.4', focalLength: '23mm', aperture: 'f/2.0', shutterSpeed: '1/60s', iso: '800', location: '新宿, 东京', date: '2023-11-05',
-      latitude: 35.6938, longitude: 139.7034 // Tokyo
-    }
-  },
-  {
-    id: '3',
-    url: 'https://picsum.photos/id/64/800/800',
-    title: '静默凝视',
-    category: Category.PORTRAIT,
-    width: 800,
-    height: 800,
-    rating: 5,
-    exif: { 
-      camera: 'Sony A7RV', lens: '85mm GM', focalLength: '85mm', aperture: 'f/1.2', shutterSpeed: '1/1000s', iso: '100', location: 'Studio A, 纽约', date: '2023-09-20',
-      latitude: 40.7128, longitude: -74.0060 // New York
     }
   },
   {
@@ -96,7 +69,7 @@ const BASE_PHOTOS: Photo[] = [
   },
 ];
 
-// Generate more photos for demo purposes
+// Generate more photos for demo purposes - FORCE HORIZONTAL DIMENSIONS
 const GENERATED_PHOTOS = Array.from({ length: 25 }).map((_, i) => {
   const base = BASE_PHOTOS[i % BASE_PHOTOS.length];
   // Slightly randomize location for demo sorting
@@ -107,7 +80,10 @@ const GENERATED_PHOTOS = Array.from({ length: 25 }).map((_, i) => {
     ...base,
     id: `gen-${i}`,
     title: `${base.title} ${i + 1}`,
-    url: `https://picsum.photos/id/${(i * 13) % 100 + 10}/800/${i % 2 === 0 ? 600 : 800}`,
+    // Force 800x600 (Horizontal) for all generated images
+    url: `https://picsum.photos/id/${(i * 13) % 100 + 10}/800/600`,
+    width: 800,
+    height: 600,
     exif: {
       ...base.exif,
       latitude: (base.exif.latitude || 0) + latOffset,
