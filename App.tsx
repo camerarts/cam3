@@ -8,6 +8,10 @@ import { LoginModal } from './components/LoginModal';
 import { MapView } from './components/MapView';
 import { ProgressBar } from './components/ProgressBar';
 import { Category, Photo, Theme } from './types';
+import { client } from './api/client';
+
+// Hardcoded Admin Token for client-side consistency (matches backend env var)
+const ADMIN_TOKEN = "1211";
 
 // Helper: Calculate distance between two coordinates in km (Haversine formula)
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -27,125 +31,33 @@ function deg2rad(deg: number) {
   return deg * (Math.PI / 180);
 }
 
-// Mock Initial Data with Coordinates - ONLY HORIZONTAL PHOTOS KEPT
-const BASE_PHOTOS: Photo[] = [
-  {
-    id: '1',
-    url: 'https://picsum.photos/id/16/800/600',
-    title: '迷雾山脉',
-    category: Category.LANDSCAPE,
-    width: 800,
-    height: 600,
-    rating: 5,
-    exif: { 
-      camera: 'Leica M11', lens: 'Summilux 35mm', focalLength: '35mm', aperture: 'f/5.6', shutterSpeed: '1/250s', iso: '100', location: '阿尔卑斯, 瑞士', date: '2023-10-12',
-      latitude: 46.8182, longitude: 8.2275 // Switzerland
-    }
-  },
-  {
-    id: '4',
-    url: 'https://picsum.photos/id/28/900/600',
-    title: '深林',
-    category: Category.LANDSCAPE,
-    width: 900,
-    height: 600,
-    rating: 4,
-    exif: { 
-      camera: 'Canon R5', lens: '15-35mm', focalLength: '15mm', aperture: 'f/8', shutterSpeed: '1/4s', iso: '50', location: '俄勒冈, 美国', date: '2023-08-15',
-      latitude: 43.8041, longitude: -120.5542 // Oregon
-    }
-  },
-  {
-    id: '5',
-    url: 'https://picsum.photos/id/106/800/600',
-    title: '霓虹雨夜',
-    category: Category.MACRO,
-    width: 800,
-    height: 600,
-    rating: 3,
-    exif: { 
-      camera: 'Nikon Z8', lens: '105mm Macro', focalLength: '105mm', aperture: 'f/4', shutterSpeed: '1/200s', iso: '400', location: '伦敦, 英国', date: '2023-12-01',
-      latitude: 51.5074, longitude: -0.1278 // London
-    }
-  },
-];
-
-// Generate more photos for demo purposes - FORCE HORIZONTAL DIMENSIONS
-const GENERATED_PHOTOS = Array.from({ length: 25 }).map((_, i) => {
-  const base = BASE_PHOTOS[i % BASE_PHOTOS.length];
-  // Slightly randomize location for demo sorting
-  const latOffset = (Math.random() - 0.5) * 10;
-  const lngOffset = (Math.random() - 0.5) * 10;
-  
-  return {
-    ...base,
-    id: `gen-${i}`,
-    title: `${base.title} ${i + 1}`,
-    // Force 800x600 (Horizontal) for all generated images
-    url: `https://picsum.photos/id/${(i * 13) % 100 + 10}/800/600`,
-    width: 800,
-    height: 600,
-    exif: {
-      ...base.exif,
-      latitude: (base.exif.latitude || 0) + latOffset,
-      longitude: (base.exif.longitude || 0) + lngOffset
-    }
-  };
-});
-
-const INITIAL_PHOTOS = [...BASE_PHOTOS, ...GENERATED_PHOTOS];
 const PAGE_SIZE = 9;
 
 // New Tabs Definition
 const FEED_TABS = ['精选', '最新', '随览', '附近', '远方'];
 
 const App: React.FC = () => {
-  // Persistence Logic: Load from local storage or use initial data
-  const [photos, setPhotos] = useState<Photo[]>(() => {
-    try {
-      const saved = localStorage.getItem('lumina_photos');
-      // Simple validation to ensure it's an array
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : INITIAL_PHOTOS;
-    } catch (e) {
-      console.error("Failed to load photos from storage", e);
-      return INITIAL_PHOTOS;
-    }
-  });
-
-  // Save to local storage whenever photos change - WITH AUTO CLEANUP FOR QUOTA
+  // Initialize photos as empty array, will fetch from API
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  
+  // Loading States
+  const [globalLoading, setGlobalLoading] = useState(false);
+  
+  // Data fetching
   useEffect(() => {
-    try {
-      localStorage.setItem('lumina_photos', JSON.stringify(photos));
-    } catch (e: any) {
-      // Catch QuotaExceededError
-      if (e.name === 'QuotaExceededError' || e.code === 22) {
-        console.warn("LocalStorage Quota Exceeded. Attempting to clean up old Base64 images...");
-        
-        // AUTO CLEANUP STRATEGY:
-        // Filter out photos that have huge Base64 strings (starts with data:image)
-        // Keep only photos that use HTTP links (R2, Unsplash, Picsum)
-        // This sacrifices old test data to save new production data.
-        const cleanPhotos = photos.filter(p => !p.url.startsWith('data:image'));
-        
-        try {
-            if (cleanPhotos.length < photos.length) {
-                // We found stuff to delete
-                localStorage.setItem('lumina_photos', JSON.stringify(cleanPhotos));
-                alert("本地存储空间已满。系统已自动清理旧的测试图片（Base64），以保存新上传的云端图片。页面将刷新。");
-                window.location.reload(); 
-            } else {
-                alert("本地存储严重不足，且无法自动清理。请手动清除浏览器缓存。");
-            }
-        } catch (retryErr) {
-             console.error("Failed to save even after cleanup", retryErr);
-             alert("保存失败：浏览器存储空间已满。");
-        }
-      } else {
-        console.error("Failed to save photos to storage", e);
+    const fetchPhotos = async () => {
+      try {
+        setGlobalLoading(true);
+        const data = await client.getPhotos(1, 100); // Fetch initial batch
+        setPhotos(data);
+      } catch (error) {
+        console.error("Failed to fetch photos:", error);
+      } finally {
+        setGlobalLoading(false);
       }
-    }
-  }, [photos]);
+    };
+    fetchPhotos();
+  }, []);
 
   const [activeCategory, setActiveCategory] = useState<Category>(Category.ALL);
   const [activeTab, setActiveTab] = useState<string>('最新');
@@ -164,8 +76,6 @@ const App: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const [theme, setTheme] = useState<Theme>('light');
   
-  // Loading States
-  const [globalLoading, setGlobalLoading] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -262,8 +172,7 @@ const App: React.FC = () => {
         break;
         
       case '最新':
-        // Photos are stored [Newest, ..., Oldest] via handleUpdatePhoto logic
-        // So we just return the order as is.
+        // API default sort is CreatedAt DESC, so no action needed for 'Latest'
         break;
         
       case '随览':
@@ -325,49 +234,39 @@ const App: React.FC = () => {
 
   const visiblePhotos = filteredPhotos.slice(0, visibleCount);
 
-  const handleUpdatePhoto = (updatedPhoto: Photo) => {
-    // Trigger loading
-    setGlobalLoading(true);
-
-    setPhotos(prevPhotos => {
-      const exists = prevPhotos.some(p => p.id === updatedPhoto.id);
-      if (exists) {
-        return prevPhotos.map(p => p.id === updatedPhoto.id ? updatedPhoto : p);
-      } else {
-        // New photo uploaded!
-        // 1. Force switch to Grid View
-        setViewMode('grid');
-        // 2. Reset filters to default to ensure visibility
-        setActiveCategory(Category.ALL);
-        setActiveTab('最新');
-        // 3. Force scroll to top
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        
-        return [updatedPhoto, ...prevPhotos]; // Prepend new photo
-      }
-    });
+  const handleUpdatePhoto = (newPhoto: Photo) => {
+    // For upload, we prepend the new photo to the list locally for immediate feedback
+    // The actual persistence is done in UploadModal calling client.uploadPhoto
+    setPhotos(prev => [newPhoto, ...prev]);
     
-    if (selectedPhoto?.id === updatedPhoto.id) {
-      setSelectedPhoto(updatedPhoto);
-    }
-
-    setTimeout(() => setGlobalLoading(false), 500);
+    // Reset filters to show new photo
+    setActiveCategory(Category.ALL);
+    setActiveTab('最新');
+    setViewMode('grid');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDeletePhoto = (e: React.MouseEvent, photoId: string) => {
+  const handleDeletePhoto = async (e: React.MouseEvent, photoId: string) => {
     // Critical: Stop propagation instantly
     e.stopPropagation();
     e.preventDefault();
 
     // Use setTimeout to ensure the UI has registered the click event 
-    // before locking the thread with window.confirm
-    setTimeout(() => {
+    setTimeout(async () => {
       const isConfirmed = window.confirm('确定要永久删除这张照片吗？');
       if (isConfirmed) {
-        setPhotos(prev => prev.filter(p => p.id !== photoId));
-        // If the deleted photo was selected, close modal
-        if (selectedPhoto?.id === photoId) {
-          setSelectedPhoto(null);
+        try {
+          setGlobalLoading(true);
+          await client.deletePhoto(photoId, ADMIN_TOKEN);
+          setPhotos(prev => prev.filter(p => p.id !== photoId));
+          if (selectedPhoto?.id === photoId) {
+            setSelectedPhoto(null);
+          }
+        } catch (err) {
+          alert("删除失败，请检查网络连接");
+          console.error(err);
+        } finally {
+          setGlobalLoading(false);
         }
       }
     }, 10);
@@ -648,7 +547,7 @@ const App: React.FC = () => {
 
             {filteredPhotos.length === 0 && (
               <div className={`text-center py-20 ${textSecondary}`}>
-                <p>该分类下暂无图片。</p>
+                <p>暂无图片，请登录上传。</p>
               </div>
             )}
           </>
